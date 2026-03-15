@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.youtube.com/"
+        },
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://www.youtube.com"
+        },
+        {
+          "header": "X-Cors-Processor",
+          "operation": "remove"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "youtube.com/api/timedtext",
+      "resourceTypes": ["xmlhttprequest", "other"]
+    }
+  }
+]
