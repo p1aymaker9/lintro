@@ -6,6 +6,11 @@
  * 浏览器存储的 Cookie，且受 DNR 规则处理，能绕过 CORS/CSP 限制。
  */
 export default defineUnlistedScript(() => {
+  // 降噪：仅静默 console.log，保留 console.warn/error。
+  const console = Object.assign({}, globalThis.console, {
+    log: (..._args: unknown[]) => {},
+  }) as Console;
+
   console.log('Offscreen: Document ready.');
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {

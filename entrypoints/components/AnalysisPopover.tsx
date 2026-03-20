@@ -2,6 +2,49 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { extractJsonFromLLM } from '../lib/llm-api';
 import type { LLMConfig } from '../lib/storage';
 
+type UiLang = 'zh' | 'en';
+
+const UI_LANG_STORAGE_KEY = 'uiLang';
+
+const I18N = {
+  zh: {
+    panelTitle: 'AI 语法分析',
+    unpin: '取消固定',
+    pin: '固定窗口',
+    close: '关闭',
+    loading: 'AI 分析中…',
+    analysisRequestFailed: 'AI 分析请求失败',
+    checkConfig: '请检查 API Key 配置或网络连接',
+    clickChunk: '点击语块查看详细解析',
+    translation: '翻译',
+    chunkDetail: '语块详解',
+    meaning: '释义',
+    grammar: '语法',
+    reading: '读音',
+    detailLoading: '详细分析加载中…',
+    detailNotReady: '详细分析暂未加载',
+    parseFailed: '解析失败',
+  },
+  en: {
+    panelTitle: 'AI Grammar Analysis',
+    unpin: 'Unpin',
+    pin: 'Pin panel',
+    close: 'Close',
+    loading: 'Analyzing with AI...',
+    analysisRequestFailed: 'AI analysis request failed',
+    checkConfig: 'Check your API key settings or network connection',
+    clickChunk: 'Click a chunk to view detailed analysis',
+    translation: 'Translation',
+    chunkDetail: 'Chunk Detail',
+    meaning: 'Meaning',
+    grammar: 'Grammar',
+    reading: 'Pronunciation',
+    detailLoading: 'Loading detailed analysis...',
+    detailNotReady: 'Detailed analysis is not ready yet',
+    parseFailed: 'Parse failed',
+  },
+} as const;
+
 // ─── 数据结构 ─────────────────────────────────────────────────────────────
 
 /** Stage 1: 快速结构（翻译 + 语块基础标签） */
@@ -110,6 +153,9 @@ const CHUNK_ACTIVE_BG = [
 // ─── 主组件 ──────────────────────────────────────────────────────────────
 
 export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: AnalysisPopoverProps) {
+  const [uiLang, setUiLang] = useState<UiLang>('zh');
+  const uiLangRef = useRef<UiLang>('zh');
+  const t = I18N[uiLang];
   const [fastStruct, setFastStruct] = useState<FastStruct | null>(null);
   const [details, setDetails] = useState<ChunkDetail[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -123,6 +169,17 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
 
   // 缓存最后一次有效 request，pin 后即使 request 变 null 也能保持显示
   const lastReqRef = useRef<AnalysisRequest | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const stored = (await browser.storage.local.get(UI_LANG_STORAGE_KEY)) as Record<string, unknown>;
+      const next = stored[UI_LANG_STORAGE_KEY] === 'en' ? 'en' : 'zh';
+      setUiLang(next);
+      uiLangRef.current = next;
+    })().catch(() => {
+      // Keep zh fallback.
+    });
+  }, []);
 
   // ── 字体大小 ──────────────────────────────────────────────────────
   const [fontSize, setFontSize] = useState(14);
@@ -202,7 +259,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
         if (cancelled) return;
 
         if (!r1?.success) {
-          setError(r1?.error || 'AI 分析请求失败');
+          setError(r1?.error || I18N[uiLangRef.current].analysisRequestFailed);
           setLoading(false);
           return;
         }
@@ -240,7 +297,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
       } catch (e: any) {
         if (!cancelled) {
           console.error('AI 语法分析失败:', e);
-          setError(e.message || '解析失败');
+          setError(e.message || I18N[uiLangRef.current].parseFailed);
           setLoading(false);
         }
       }
@@ -361,7 +418,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
                       cursor-grab active:cursor-grabbing select-none"
            onMouseDown={handleDragStart}>
         <span className="font-semibold text-white/90 text-xs tracking-wide uppercase">
-          AI 语法分析
+          {t.panelTitle}
         </span>
         <div className="flex items-center gap-1"
              onMouseDown={e => e.stopPropagation()}>
@@ -370,7 +427,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
             className={`p-1.5 rounded-md transition-colors ${
               pinned ? 'bg-blue-500/30 text-blue-300' : 'text-gray-400 hover:text-white hover:bg-white/10'
             }`}
-            title={pinned ? '取消固定' : '固定窗口'}
+            title={pinned ? t.unpin : t.pin}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                  fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"
@@ -382,7 +439,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
           <button
             onClick={handleClose}
             className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-            title="关闭"
+            title={t.close}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                  fill="none" stroke="currentColor" strokeWidth="2"
@@ -401,7 +458,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
         {loading && (
           <div className="flex items-center justify-center py-10 gap-2">
             <div className="w-4 h-4 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
-            <span className="text-blue-300/70 text-xs">AI 分析中…</span>
+            <span className="text-blue-300/70 text-xs">{t.loading}</span>
           </div>
         )}
 
@@ -409,7 +466,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
         {error && !loading && (
           <div className="py-6 text-center px-4">
             <p className="text-red-400/90 text-xs mb-2">⚠ {error}</p>
-            <p className="text-gray-500 text-xs">请检查 API Key 配置或网络连接</p>
+            <p className="text-gray-500 text-xs">{t.checkConfig}</p>
           </div>
         )}
 
@@ -461,7 +518,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
                 })}
               </div>
               <p className="text-gray-600 mt-1.5 text-center" style={{ fontSize: fsPosLabel }}>
-                点击语块查看详细解析
+                {t.clickChunk}
               </p>
             </div>
 
@@ -470,7 +527,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
 
               {/* 全句翻译（始终显示） */}
               <section>
-                <h3 className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">翻译</h3>
+                <h3 className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">{t.translation}</h3>
                 <p className="text-blue-200/90 leading-relaxed" style={{ fontSize: fsTranslation }}>
                   {fastStruct.translation}
                 </p>
@@ -485,7 +542,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
                   <section className="border-t border-white/5 pt-2.5">
                     <div className="flex items-center gap-2 mb-1.5">
                       <h3 className="text-[10px] uppercase tracking-widest text-gray-500">
-                        语块详解
+                        {t.chunkDetail}
                       </h3>
                       <span className={`font-medium px-1.5 py-0.5 rounded border
                         ${CHUNK_ACTIVE_BG[colorIdx]}`} style={{ fontSize: fsDetail }}>
@@ -497,7 +554,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
                       <div className="space-y-2">
                         {/* 释义 */}
                         <div>
-                          <span className="text-[10px] text-gray-500 mr-1.5">释义</span>
+                          <span className="text-[10px] text-gray-500 mr-1.5">{t.meaning}</span>
                           <span className="text-white/90" style={{ fontSize: fsDetail }}>
                             {detail.meaning}
                           </span>
@@ -506,7 +563,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
                         {/* 语法要点 */}
                         {detail.grammar && detail.grammar.length > 0 && (
                           <div>
-                            <span className="text-[10px] text-gray-500 block mb-0.5">语法</span>
+                            <span className="text-[10px] text-gray-500 block mb-0.5">{t.grammar}</span>
                             <ul className="space-y-0.5">
                               {detail.grammar.map((g, gi) => (
                                 <li key={gi} className="text-gray-300/90 leading-relaxed flex gap-1.5"
@@ -522,7 +579,7 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
                         {/* 注音 */}
                         {detail.reading && (
                           <div>
-                            <span className="text-[10px] text-gray-500 mr-1.5">读音</span>
+                            <span className="text-[10px] text-gray-500 mr-1.5">{t.reading}</span>
                             <span className="text-gray-400" style={{ fontSize: fsDetail }}>
                               {detail.reading}
                             </span>
@@ -542,10 +599,10 @@ export default function AnalysisPopover({ request, onClose, opacity = 0.95 }: An
                     ) : detailLoading ? (
                       <div className="flex items-center gap-2 py-3">
                         <div className="w-3 h-3 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
-                        <span className="text-blue-300/70 text-xs">详细分析加载中…</span>
+                        <span className="text-blue-300/70 text-xs">{t.detailLoading}</span>
                       </div>
                     ) : (
-                      <p className="text-gray-500 text-xs py-2">详细分析暂未加载</p>
+                      <p className="text-gray-500 text-xs py-2">{t.detailNotReady}</p>
                     )}
                   </section>
                 );

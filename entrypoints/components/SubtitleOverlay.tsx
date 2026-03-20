@@ -304,7 +304,7 @@ export default function SubtitleOverlay({ subtitles, onAnalysisRequest }: Subtit
                    cursor-pointer hover:bg-black/80 transition-colors ${bgClass}`}
         style={{ pointerEvents: 'auto' }}
         onClick={handleSubtitleClick}
-        title="点击进行 AI 语法分析"
+        title="Click to analyze with AI / 点击进行 AI 语法分析"
       >
         {originalFirst ? (
           <>{originalLine}{translationLine}</>

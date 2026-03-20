@@ -53,6 +53,7 @@ export function normalizeYTJson3(data: YTJson3Data): SubtitleItem[] {
   if (!data?.events) return [];
 
   const items: SubtitleItem[] = [];
+  const lastIndexByWindow = new Map<number, number>();
 
   for (const event of data.events) {
     // 必须有 segs 和时间信息
@@ -74,7 +75,35 @@ export function normalizeYTJson3(data: YTJson3Data): SubtitleItem[] {
     const duration = (event.dDurationMs ?? 0) / 1000;
     const endTime = startTime + duration;
 
+    // YouTube 有时会把同一句后半段作为 aAppend 事件追加到同一窗口。
+    // 若不合并，会出现只显示第一行/前半句的问题。
+    const isAppend = event.aAppend === 1;
+    const winId = event.wWinId;
+    if (isAppend) {
+      const idx = typeof winId === 'number' ? lastIndexByWindow.get(winId) : undefined;
+      const targetIdx = typeof idx === 'number'
+        ? idx
+        : (items.length > 0 ? items.length - 1 : -1);
+
+      if (targetIdx >= 0) {
+        const prev = items[targetIdx];
+        const mergedText = `${prev.text} ${text}`.replace(/\s{2,}/g, ' ').trim();
+        // 避免重复追加完全相同内容
+        if (mergedText !== prev.text) {
+          prev.text = mergedText;
+        }
+        prev.endTime = Math.max(prev.endTime, endTime);
+        if (typeof winId === 'number') {
+          lastIndexByWindow.set(winId, targetIdx);
+        }
+        continue;
+      }
+    }
+
     items.push({ startTime, endTime, text });
+    if (typeof winId === 'number') {
+      lastIndexByWindow.set(winId, items.length - 1);
+    }
   }
 
   return items;

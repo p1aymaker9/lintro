@@ -14,6 +14,11 @@
 import type { SubtitleItem } from './subtitle-normalizer';
 import type { SentenceBlock } from './sentence-chunker';
 
+// 降噪：仅静默 console.log，保留 console.warn/error。
+const console = Object.assign({}, globalThis.console, {
+  log: (..._args: unknown[]) => {},
+}) as Console;
+
 // ─── 配置 ────────────────────────────────────────────────────────────────
 
 /** 每次发送给 LLM 的句块数 */

@@ -6,8 +6,6 @@ export default defineConfig({
     name: 'Lintro',
     permissions: [
       'storage',
-      'scripting',
-      'activeTab',
       'offscreen',
       'declarativeNetRequest',
       'declarativeNetRequestWithHostAccess',

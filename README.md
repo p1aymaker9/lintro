@@ -2,10 +2,18 @@
   <img src="public/icon/128.png" width="80" height="80" alt="Lintro logo" />
 </p>
 
-<h1 align="center">Lintro</h1>
+<h1 align="center">Lintro - 双语字幕与 AI 语法分析</h1>
+
+<p align="center">
+   中文 | <a href="./README.en.md">English</a>
+</p>
 
 <p align="center">
   <strong>YouTube & Bilibili 双语字幕叠加 + AI 语法分析 — 看视频学语言</strong>
+</p>
+
+<p align="center">
+   <a href="https://chromewebstore.google.com/detail/lintro/bhmidhindpnbnalkphdlbiclkioiegol?hl=zh">在 Chrome 应用商店获取</a>
 </p>
 
 <p align="center">
@@ -21,25 +29,34 @@
 
 ## 功能特性
 
+## 界面预览
+
+
+<p align="center">
+   <img src="./pic/example2.jpg" alt="双语字幕与分析弹窗示例 2" width="85%" />
+</p>
+
+<p align="center">
+   <img src="./pic/example1.png" alt="双语字幕与分析弹窗示例 1" width="85%" />
+</p>
+
+
 ### 🎬 双语字幕叠加
 - 在 **YouTube** 和 **Bilibili** 视频播放器内实时叠加翻译字幕
-- 三种翻译引擎：**Google Translate（免费）**、**Microsoft Translate（免费）**、**LLM 大模型翻译**
+- 三种翻译引擎：**Google Translate**、**Microsoft Translate**、**LLM 大模型翻译**
 - 滑动窗口预翻译，字幕切换无延迟
 - 智能句块聚合算法，CJK ↔ 英文翻译精确断句，避免过长译文
 - 自动检测广告片段并跳过翻译
-- 自动开启/关闭 CC 字幕触发数据获取，用户无需手动操作
+
 
 ### 🧠 AI 语法分析
 - 点击任意字幕句子或使用快捷键，触发 AI 语法解析
-- **两段式渐进加载**：先快速展示句子结构（角色标注），再静默补充每个语块的词性、变形、释义、语法注释
-- 语块卡片 UI：顶部显示语义角色（执行者 / 动作 / 对象 / 时间…），底部标注语法特征（过去式 / 被动语态…）
-- 支持拖拽、固定、透明度调节
 
 ### ⚙️ 多 API 配置管理
 - 多组 API Profile：可保存多套 API 凭据，翻译与分析可使用不同模型
 - 一键测试连接：验证 API Key / Endpoint / Model 是否可用
-- 预设供应商：**OpenAI / DeepSeek / 智谱 GLM / Kimi (Moonshot) / 硅基流动 (SiliconFlow)** 及任何 OpenAI 兼容接口
-- 支持 DeepSeek R1 等推理模型（自动剥离 `<think>` 标签）
+- 预设供应商：**OpenAI / DeepSeek / 智谱 GLM / 硅基流动 (SiliconFlow)** 及任何 OpenAI 兼容接口
+- 推荐使用非推理模型，响应速度更快
 
 ### 🎨 显示自定义
 - 字幕字体大小 / 分析窗口字体大小独立调节
@@ -61,7 +78,7 @@
 - 主字幕语言手动选择或自动检测
 - 设置项自动保存，无需手动提交
 
-## 安装方式
+## 本地安装方式（建议从应用商店获取）
 
 ### Chrome / Edge — 开发者模式加载
 

@@ -5,6 +5,11 @@ import { resolveActiveProfiles } from './lib/storage';
 import { getOrCreateDeviceId } from './lib/device-id';
 import { callTrialLLM } from './lib/trial-api';
 
+// 降噪：仅静默 console.log，保留 console.warn/error。
+const console = Object.assign({}, globalThis.console, {
+  log: (..._args: unknown[]) => {},
+}) as Console;
+
 /**
  * Background Service Worker — 调度员
  *

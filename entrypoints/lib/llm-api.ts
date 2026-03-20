@@ -24,6 +24,13 @@ function langLabel(code: string) {
   return LANG_NAME[code] ?? code;
 }
 
+const JSON_ONLY_SUFFIX = [
+  'Return valid JSON only.',
+  'Do not output markdown.',
+  'Do not wrap in code fences.',
+  'Do not include explanations before or after the JSON.',
+].join('\n');
+
 function buildTranslatePrompt(targetLang: string): string {
   return [
     `You are a professional subtitle translator.`,
@@ -70,6 +77,8 @@ function buildGrammarPrompt(targetLang: string): string {
     `- "notes": Optional extra info like formality level, common collocations, or similar expressions. Use empty string if nothing notable.`,
     `- "translation": A single natural translation of the full sentence.`,
     `- Aim for 3-10 chunks depending on sentence complexity.`,
+    '',
+    JSON_ONLY_SUFFIX,
   ].join('\n');
 }
 
@@ -92,6 +101,8 @@ function buildFastStructPrompt(targetLang: string): string {
     `- Concatenating all chunk "text" values MUST reproduce the original sentence exactly (including spaces/punctuation).`,
     `- "translation": a single natural translation of the full sentence in ${langLabel(targetLang)}.`,
     `- Output ONLY the JSON object. Be fast.`,
+    '',
+    JSON_ONLY_SUFFIX,
   ].join('\n');
 }
 
@@ -123,6 +134,8 @@ function buildDeepDetailPrompt(targetLang: string): string {
     `- "meaning": The specific meaning of this chunk in context of the full sentence.`,
     `- "grammar": 1-3 concise grammar observations for language learners.`,
     `- "notes": Optional extra info. Use empty string if nothing notable.`,
+    '',
+    JSON_ONLY_SUFFIX,
   ].join('\n');
 }
 
@@ -292,14 +305,16 @@ export interface LLMConfigOverride {
   targetLang: string;
 }
 
-// ─── 思考模式兼容（enable_thinking 探测 + 缓存）────────────────────────
+// ─── 可选参数兼容（reasoning / response_format / enable_thinking）───────
 
-type ThinkingSupportRecord = {
+type FeatureSupportRecord = {
   checkedAt: number;
   supported: boolean;
 };
 
-const THINKING_SUPPORT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+type OptionalFeature = 'enable_thinking' | 'reasoning' | 'response_format' | 'chat_template_kwargs';
+
+const FEATURE_SUPPORT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function getEndpointHost(endpoint: string): string {
   try {
@@ -309,8 +324,8 @@ function getEndpointHost(endpoint: string): string {
   }
 }
 
-function thinkingSupportKey(endpoint: string, model: string) {
-  return `thinkingSupport:${getEndpointHost(endpoint)}:${model}`;
+function featureSupportKey(endpoint: string, model: string, feature: OptionalFeature) {
+  return `featureSupport:${feature}:${getEndpointHost(endpoint)}:${model}`;
 }
 
 function looksLikeUnknownParamError(text: string, paramName: string) {
@@ -322,11 +337,11 @@ function looksLikeUnknownParamError(text: string, paramName: string) {
 
 async function loadThinkingSupport(endpoint: string, model: string): Promise<boolean | null> {
   try {
-    const key = thinkingSupportKey(endpoint, model);
+    const key = featureSupportKey(endpoint, model, 'enable_thinking');
     const res = (await browser.storage.local.get(key)) as Record<string, unknown>;
-    const record = res[key] as ThinkingSupportRecord | undefined;
+    const record = res[key] as FeatureSupportRecord | undefined;
     if (!record || typeof record.checkedAt !== 'number' || typeof record.supported !== 'boolean') return null;
-    if (Date.now() - record.checkedAt > THINKING_SUPPORT_TTL_MS) return null;
+    if (Date.now() - record.checkedAt > FEATURE_SUPPORT_TTL_MS) return null;
     return record.supported;
   } catch {
     return null;
@@ -335,31 +350,65 @@ async function loadThinkingSupport(endpoint: string, model: string): Promise<boo
 
 async function saveThinkingSupport(endpoint: string, model: string, supported: boolean): Promise<void> {
   try {
-    const key = thinkingSupportKey(endpoint, model);
-    const record: ThinkingSupportRecord = { checkedAt: Date.now(), supported };
+    const key = featureSupportKey(endpoint, model, 'enable_thinking');
+    const record: FeatureSupportRecord = { checkedAt: Date.now(), supported };
     await browser.storage.local.set({ [key]: record });
   } catch {
     // ignore cache failures
   }
 }
 
-async function probeThinkingSupportOnce(endpoint: string, apiKey: string, model: string): Promise<boolean | null> {
-  // Returns:
-  // - true  => confirmed supported
-  // - false => confirmed NOT supported (unknown param)
-  // - null  => cannot determine (auth / rate limit / transient errors)
-  const body = {
-    model,
-    messages: [
-      { role: 'system', content: 'You are a helpful assistant.' },
-      { role: 'user', content: 'ping' },
-    ],
-    temperature: 0,
-    max_tokens: 1,
-    enable_thinking: false,
-  };
-
+async function loadFeatureSupport(endpoint: string, model: string, feature: OptionalFeature): Promise<boolean | null> {
   try {
+    const key = featureSupportKey(endpoint, model, feature);
+    const res = (await browser.storage.local.get(key)) as Record<string, unknown>;
+    const record = res[key] as FeatureSupportRecord | undefined;
+    if (!record || typeof record.checkedAt !== 'number' || typeof record.supported !== 'boolean') return null;
+    if (Date.now() - record.checkedAt > FEATURE_SUPPORT_TTL_MS) return null;
+    return record.supported;
+  } catch {
+    return null;
+  }
+}
+
+async function saveFeatureSupport(endpoint: string, model: string, feature: OptionalFeature, supported: boolean): Promise<void> {
+  try {
+    const key = featureSupportKey(endpoint, model, feature);
+    const record: FeatureSupportRecord = { checkedAt: Date.now(), supported };
+    await browser.storage.local.set({ [key]: record });
+  } catch {
+    // ignore cache failures
+  }
+}
+
+function isJsonPromptType(promptType: PromptType) {
+  return promptType === 'grammar_analysis' || promptType === 'fast_struct' || promptType === 'deep_detail';
+}
+
+function looksLikeReasoningParamError(text: string) {
+  return looksLikeUnknownParamError(text, 'reasoning')
+    || looksLikeUnknownParamError(text, 'reasoning.effort')
+    || /reasoning\s*effort/i.test(text);
+}
+
+function looksLikeChatTemplateKwargsError(text: string) {
+  return looksLikeUnknownParamError(text, 'chat_template_kwargs')
+    || looksLikeUnknownParamError(text, 'chat_template_kwargs.enable_thinking')
+    || /chat_template_kwargs/i.test(text);
+}
+
+function looksLikeResponseFormatError(text: string) {
+  return looksLikeUnknownParamError(text, 'response_format')
+    || /json_schema|json object|invalid response[_\s-]?format/i.test(text);
+}
+
+async function postChatCompletionsWithFallback(
+  endpoint: string,
+  apiKey: string,
+  model: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: true; data: any } | { ok: false; status: number; errorText: string }> {
+  for (let attempt = 0; attempt < 4; attempt++) {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -369,36 +418,56 @@ async function probeThinkingSupportOnce(endpoint: string, apiKey: string, model:
       body: JSON.stringify(body),
     });
 
-    if (res.ok) return true;
-
-    // Only treat a *parameter-specific* 400 as definitive.
-    const text = await res.text().catch(() => '');
-    if (res.status === 400 && looksLikeUnknownParamError(text, 'enable_thinking')) {
-      return false;
+    if (res.ok) {
+      const data = await res.json();
+      return { ok: true, data };
     }
 
-    return null;
-  } catch {
-    return null;
+    const errorText = await res.text().catch(() => '');
+    if (res.status !== 400) {
+      return { ok: false, status: res.status, errorText };
+    }
+
+    let removedOptionalParam = false;
+
+    if (body.reasoning && looksLikeReasoningParamError(errorText)) {
+      delete body.reasoning;
+      await saveFeatureSupport(endpoint, model, 'reasoning', false);
+      removedOptionalParam = true;
+    }
+
+    if (body.response_format && looksLikeResponseFormatError(errorText)) {
+      delete body.response_format;
+      await saveFeatureSupport(endpoint, model, 'response_format', false);
+      removedOptionalParam = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'enable_thinking') && looksLikeUnknownParamError(errorText, 'enable_thinking')) {
+      delete body.enable_thinking;
+      await saveFeatureSupport(endpoint, model, 'enable_thinking', false);
+      await saveThinkingSupport(endpoint, model, false);
+      removedOptionalParam = true;
+    }
+
+    if (body.chat_template_kwargs && looksLikeChatTemplateKwargsError(errorText)) {
+      delete body.chat_template_kwargs;
+      await saveFeatureSupport(endpoint, model, 'chat_template_kwargs', false);
+      removedOptionalParam = true;
+    }
+
+    if (removedOptionalParam) {
+      continue;
+    }
+
+    return { ok: false, status: res.status, errorText };
   }
+
+  return { ok: false, status: 400, errorText: 'Too many retries while removing unsupported params' };
 }
 
-async function shouldSendEnableThinking(endpoint: string, apiKey: string, model: string): Promise<boolean> {
-  const cached = await loadThinkingSupport(endpoint, model);
-  if (cached !== null) return cached;
-
-  const probed = await probeThinkingSupportOnce(endpoint, apiKey, model);
-  if (probed === true) {
-    await saveThinkingSupport(endpoint, model, true);
-    return true;
-  }
-  if (probed === false) {
-    await saveThinkingSupport(endpoint, model, false);
-    return false;
-  }
-
-  // Cannot determine; to avoid breaking real requests, default to NOT sending.
-  return false;
+function shouldSendQwenChatTemplateKwargs(model: string) {
+  const m = (model || '').toLowerCase();
+  return m.includes('qwen') && /qwen\s*3|qwen3/.test(m);
 }
 
 export async function primeEnableThinkingSupport(profile: {
@@ -407,7 +476,9 @@ export async function primeEnableThinkingSupport(profile: {
   model: string;
 }): Promise<void> {
   if (!profile.apiKey || !profile.apiEndpoint || !profile.model) return;
-  await shouldSendEnableThinking(profile.apiEndpoint, profile.apiKey, profile.model);
+  // 仅保留兼容 API，避免首次探测请求增加时延。
+  // 真正支持性由真实请求自动降级并缓存。
+  await loadThinkingSupport(profile.apiEndpoint, profile.model);
 }
 
 /**
@@ -458,7 +529,7 @@ export async function callLLM(
     userContent = `[Context]\n${payload.context}\n\n[Text to process]\n${payload.text}`;
   }
 
-  const body = {
+  const body: Record<string, unknown> = {
     model,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -468,27 +539,50 @@ export async function callLLM(
     max_tokens: payload.promptType === 'fast_struct' ? 1024 : 4096,
   };
 
-  // 默认尝试关闭“思考模式”，但先探测是否支持，避免首次请求失败
-  if (await shouldSendEnableThinking(apiEndpoint, apiKey, model)) {
-    (body as any).enable_thinking = false;
+  // 新策略：优先使用现代推理控制，失败后自动降级。
+  const reasoningSupport = await loadFeatureSupport(apiEndpoint, model, 'reasoning');
+  if (reasoningSupport !== false) {
+    body.reasoning = { effort: 'none' };
+  }
+
+  // 兼容 DeepSeek 等端点的老参数（若不支持会自动移除并缓存）。
+  const enableThinkingSupport = await loadFeatureSupport(apiEndpoint, model, 'enable_thinking');
+  if (enableThinkingSupport !== false) {
+    body.enable_thinking = false;
+  }
+
+  // Qwen 3.x/3.5: some gateways honor `chat_template_kwargs.enable_thinking=false`.
+  if (shouldSendQwenChatTemplateKwargs(model)) {
+    const qwenKwargsSupport = await loadFeatureSupport(apiEndpoint, model, 'chat_template_kwargs');
+    if (qwenKwargsSupport !== false) {
+      body.chat_template_kwargs = { enable_thinking: false };
+    }
+  }
+
+  // JSON 任务优先使用 response_format 约束，提升可解析稳定性。
+  if (isJsonPromptType(payload.promptType)) {
+    const responseFormatSupport = await loadFeatureSupport(apiEndpoint, model, 'response_format');
+    if (responseFormatSupport !== false) {
+      body.response_format = { type: 'json_object' };
+    }
   }
 
   try {
-    const res = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    const request = await postChatCompletionsWithFallback(apiEndpoint, apiKey, model, body);
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      return { success: false, error: `HTTP ${res.status}: ${errText.slice(0, 200)}` };
+    if (!request.ok) {
+      return { success: false, error: `HTTP ${request.status}: ${request.errorText.slice(0, 200)}` };
     }
 
-    const data = await res.json();
+    if (body.reasoning) await saveFeatureSupport(apiEndpoint, model, 'reasoning', true);
+    if (body.response_format) await saveFeatureSupport(apiEndpoint, model, 'response_format', true);
+    if (Object.prototype.hasOwnProperty.call(body, 'enable_thinking')) {
+      await saveFeatureSupport(apiEndpoint, model, 'enable_thinking', true);
+      await saveThinkingSupport(apiEndpoint, model, true);
+    }
+    if (body.chat_template_kwargs) await saveFeatureSupport(apiEndpoint, model, 'chat_template_kwargs', true);
+
+    const data = request.data;
     const content = data?.choices?.[0]?.message?.content?.trim();
 
     if (!content) {
@@ -539,7 +633,7 @@ export async function llmBatchTranslate(
     'Do NOT skip or merge lines.',
   ].join('\n');
 
-  const body = {
+  const body: Record<string, unknown> = {
     model,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -549,24 +643,37 @@ export async function llmBatchTranslate(
     max_tokens: 4096,
   };
 
-  if (await shouldSendEnableThinking(apiEndpoint, apiKey, model)) {
-    (body as any).enable_thinking = false;
+  // 翻译批处理同样优先降低推理开销。
+  const reasoningSupport = await loadFeatureSupport(apiEndpoint, model, 'reasoning');
+  if (reasoningSupport !== false) {
+    body.reasoning = { effort: 'none' };
   }
 
-  const res = await fetch(apiEndpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    throw new Error(`LLM HTTP ${res.status}`);
+  const enableThinkingSupport = await loadFeatureSupport(apiEndpoint, model, 'enable_thinking');
+  if (enableThinkingSupport !== false) {
+    body.enable_thinking = false;
   }
 
-  const data = await res.json();
+  if (shouldSendQwenChatTemplateKwargs(model)) {
+    const qwenKwargsSupport = await loadFeatureSupport(apiEndpoint, model, 'chat_template_kwargs');
+    if (qwenKwargsSupport !== false) {
+      body.chat_template_kwargs = { enable_thinking: false };
+    }
+  }
+
+  const request = await postChatCompletionsWithFallback(apiEndpoint, apiKey, model, body);
+  if (!request.ok) {
+    throw new Error(`LLM HTTP ${request.status}`);
+  }
+
+  if (body.reasoning) await saveFeatureSupport(apiEndpoint, model, 'reasoning', true);
+  if (Object.prototype.hasOwnProperty.call(body, 'enable_thinking')) {
+    await saveFeatureSupport(apiEndpoint, model, 'enable_thinking', true);
+    await saveThinkingSupport(apiEndpoint, model, true);
+  }
+  if (body.chat_template_kwargs) await saveFeatureSupport(apiEndpoint, model, 'chat_template_kwargs', true);
+
+  const data = request.data;
   const content: string = data?.choices?.[0]?.message?.content?.trim() ?? '';
 
   // 解析 [N] 格式的输出

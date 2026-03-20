@@ -5,6 +5,11 @@ export interface SubtitleItem {
   text: string;      // 字幕文本
 }
 
+// 降噪：此脚本运行在页面上下文，不能改写全局 console；仅在本模块内静默 console.log。
+const console = Object.assign({}, globalThis.console, {
+  log: (..._args: unknown[]) => {},
+}) as Console;
+
 // ─── B站字幕格式归一化 ────────────────────────────────────────────────────────
 interface BilibiliSubtitleTrack {
   id: number;

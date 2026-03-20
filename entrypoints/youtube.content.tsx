@@ -9,6 +9,20 @@ import SubtitleOverlay from './components/SubtitleOverlay';
 import AnalysisPopover, { type AnalysisRequest } from './components/AnalysisPopover';
 import { loadConfig, type CaptionTrack, type LLMConfig } from './lib/storage';
 
+// 降噪：仅保留“翻译完成”这一条关键日志（不区分引擎）。
+// 例："[翻译状态] ✅ Google Translate 翻译完成: 174/174 条"
+const console = (() => {
+  const raw = globalThis.console;
+  const allowRe = /^\[翻译状态\] ✅ .+ 翻译完成: \d+\/\d+ 条$/;
+  const log = (...args: unknown[]) => {
+    const first = args[0];
+    if (typeof first === 'string' && allowRe.test(first)) {
+      (raw.log as (...a: unknown[]) => void)(...args);
+    }
+  };
+  return Object.assign({}, raw, { log }) as Console;
+})();
+
 // ─── 全局字幕数据（跨组件通信）────────────────────────────────────────────
 let globalSubtitles: SubtitleItem[] = [];
 let globalListeners: Array<(subs: SubtitleItem[]) => void> = [];
