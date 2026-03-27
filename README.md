@@ -13,7 +13,8 @@
 </p>
 
 <p align="center">
-   <a href="https://chromewebstore.google.com/detail/lintro/bhmidhindpnbnalkphdlbiclkioiegol?hl=zh">在 Chrome 应用商店获取</a>
+   <a href="https://chromewebstore.google.com/detail/lintro/bhmidhindpnbnalkphdlbiclkioiegol?hl=zh">在 Chrome 应用商店获取</a> |
+   <a href="https://microsoftedge.microsoft.com/addons/detail/lintro/jcfcpdonbccbnlpjhbkebhnapggikkkb">在 Edge 插件商店获取</a>
 </p>
 
 <p align="center">

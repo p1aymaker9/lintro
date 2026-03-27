@@ -2,7 +2,7 @@
   <img src="public/icon/128.png" width="80" height="80" alt="Lintro logo" />
 </p>
 
-<h1 align="center">Lintro - Bilingual Subtitles & AI Grammar</h1>
+<h1 align="center">Lintro - AI Language Learning for Video Subtitles</h1>
 
 <p align="center">
   <a href="./README.md">中文</a> | English
@@ -13,7 +13,8 @@
 </p>
 
 <p align="center">
-  <a href="https://chromewebstore.google.com/detail/lintro/bhmidhindpnbnalkphdlbiclkioiegol?hl=en">Get it on Chrome Web Store</a>
+  <a href="https://chromewebstore.google.com/detail/lintro/bhmidhindpnbnalkphdlbiclkioiegol?hl=en">Get it on Chrome Web Store</a> |
+  <a href="https://microsoftedge.microsoft.com/addons/detail/lintro/jcfcpdonbccbnlpjhbkebhnapggikkkb">Get it on Edge Add-ons</a>
 </p>
 
 <p align="center">
