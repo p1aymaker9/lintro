@@ -20,7 +20,9 @@
     "build:edge": "wxt build -b edge",
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
+    "zip:edge": "wxt zip -b edge",
     "zip:firefox": "wxt zip -b firefox",
+    "release:build": "pnpm run zip && pnpm run zip:edge && pnpm run zip:firefox",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare"
   },

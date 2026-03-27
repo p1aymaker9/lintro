@@ -46,19 +46,34 @@ export default defineBackground(() => {
     }
   }
 
+  function formatUnknownError(err: unknown) {
+    if (err instanceof Error && err.message) return err.message;
+    return String(err ?? 'Unknown error');
+  }
+
+  function respondUnhandled(sendResponse: (response?: any) => void, err: unknown, tag: string) {
+    const message = `${tag}: ${formatUnknownError(err)}`;
+    console.error('Background:', message);
+    sendResponse({ success: false, error: message });
+  }
+
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'FETCH_SUBTITLES_JSON') {
       (async () => {
-        await setupOffscreen();
-        console.log('Background: Forwarding fetch to Offscreen, URL:', message.url);
+        try {
+          await setupOffscreen();
+          console.log('Background: Forwarding fetch to Offscreen, URL:', message.url);
 
-        // 将任务转发给离屏页面执行真实的 fetch
-        const response = await browser.runtime.sendMessage({
-          action: 'OFFSCREEN_FETCH',
-          url: message.url,
-        });
+          // 将任务转发给离屏页面执行真实的 fetch
+          const response = await browser.runtime.sendMessage({
+            action: 'OFFSCREEN_FETCH',
+            url: message.url,
+          });
 
-        sendResponse(response);
+          sendResponse(response);
+        } catch (err: unknown) {
+          respondUnhandled(sendResponse, err, '字幕抓取失败');
+        }
       })();
 
       return true; // 保持异步通信通道开启
@@ -118,28 +133,32 @@ export default defineBackground(() => {
     // ── LLM API 代理 (单次) ──────────────────────────────────────────
     if (message.action === 'CALL_LLM_API') {
       (async () => {
-        const { translate, analysis } = await resolveActiveProfiles();
-        if (message.promptType === 'grammar_analysis' && analysis.useTrial) {
-          console.log('Background: CALL_LLM_API grammar_analysis (free trial)');
-          const result = await callTrialLLM({
+        try {
+          const { translate, analysis } = await resolveActiveProfiles();
+          if (message.promptType === 'grammar_analysis' && analysis.useTrial) {
+            console.log('Background: CALL_LLM_API grammar_analysis (free trial)');
+            const result = await callTrialLLM({
+              promptType: message.promptType,
+              text: message.text,
+              context: message.context,
+              targetLang: analysis.targetLang,
+            });
+            sendResponse(result);
+            return;
+          }
+
+          const override = (message.promptType === 'grammar_analysis') ? analysis : undefined;
+          console.log('Background: CALL_LLM_API', message.promptType,
+            override ? `(analysis engine: ${override.model})` : '(default engine)');
+          const result = await callLLM({
             promptType: message.promptType,
             text: message.text,
             context: message.context,
-            targetLang: analysis.targetLang,
-          });
+          }, override);
           sendResponse(result);
-          return;
+        } catch (err: unknown) {
+          respondUnhandled(sendResponse, err, 'LLM 请求失败');
         }
-
-        const override = (message.promptType === 'grammar_analysis') ? analysis : undefined;
-        console.log('Background: CALL_LLM_API', message.promptType,
-          override ? `(analysis engine: ${override.model})` : '(default engine)');
-        const result = await callLLM({
-          promptType: message.promptType,
-          text: message.text,
-          context: message.context,
-        }, override);
-        sendResponse(result);
       })();
       return true;
     }
@@ -147,23 +166,27 @@ export default defineBackground(() => {
     // ── 两段式分析：Stage 1 快速结构 ──────────────────────────────────
     if (message.action === 'CALL_LLM_FAST_STRUCT') {
       (async () => {
-        const { analysis } = await resolveActiveProfiles();
-        if (analysis.useTrial) {
-          console.log('Background: CALL_LLM_FAST_STRUCT (free trial)');
-          const result = await callTrialLLM({
+        try {
+          const { analysis } = await resolveActiveProfiles();
+          if (analysis.useTrial) {
+            console.log('Background: CALL_LLM_FAST_STRUCT (free trial)');
+            const result = await callTrialLLM({
+              promptType: 'fast_struct',
+              text: message.text,
+              targetLang: analysis.targetLang,
+            });
+            sendResponse(result);
+            return;
+          }
+          console.log('Background: CALL_LLM_FAST_STRUCT', `(engine: ${analysis.model})`);
+          const result = await callLLM({
             promptType: 'fast_struct',
             text: message.text,
-            targetLang: analysis.targetLang,
-          });
+          }, analysis);
           sendResponse(result);
-          return;
+        } catch (err: unknown) {
+          respondUnhandled(sendResponse, err, '快速结构分析失败');
         }
-        console.log('Background: CALL_LLM_FAST_STRUCT', `(engine: ${analysis.model})`);
-        const result = await callLLM({
-          promptType: 'fast_struct',
-          text: message.text,
-        }, analysis);
-        sendResponse(result);
       })();
       return true;
     }
@@ -171,25 +194,29 @@ export default defineBackground(() => {
     // ── 两段式分析：Stage 2 深度详解 ──────────────────────────────────
     if (message.action === 'CALL_LLM_DEEP_DETAIL') {
       (async () => {
-        const { analysis } = await resolveActiveProfiles();
-        if (analysis.useTrial) {
-          console.log('Background: CALL_LLM_DEEP_DETAIL (free trial)');
-          const result = await callTrialLLM({
+        try {
+          const { analysis } = await resolveActiveProfiles();
+          if (analysis.useTrial) {
+            console.log('Background: CALL_LLM_DEEP_DETAIL (free trial)');
+            const result = await callTrialLLM({
+              promptType: 'deep_detail',
+              text: message.text,
+              context: message.context,
+              targetLang: analysis.targetLang,
+            });
+            sendResponse(result);
+            return;
+          }
+          console.log('Background: CALL_LLM_DEEP_DETAIL', `(engine: ${analysis.model})`);
+          const result = await callLLM({
             promptType: 'deep_detail',
             text: message.text,
             context: message.context,
-            targetLang: analysis.targetLang,
-          });
+          }, analysis);
           sendResponse(result);
-          return;
+        } catch (err: unknown) {
+          respondUnhandled(sendResponse, err, '深度解析失败');
         }
-        console.log('Background: CALL_LLM_DEEP_DETAIL', `(engine: ${analysis.model})`);
-        const result = await callLLM({
-          promptType: 'deep_detail',
-          text: message.text,
-          context: message.context,
-        }, analysis);
-        sendResponse(result);
       })();
       return true;
     }

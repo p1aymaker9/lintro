@@ -1,0 +1,169 @@
+name: Extension Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_chrome:
+        description: "Publish to Chrome Web Store"
+        required: false
+        default: "false"
+      publish_edge:
+        description: "Publish to Edge Add-ons"
+        required: false
+        default: "false"
+      publish_firefox:
+        description: "Publish to Firefox AMO"
+        required: false
+        default: "false"
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and zip all targets
+        run: pnpm run release:build
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-zips
+          path: |
+            .output/*-chrome.zip
+            .output/*-edge.zip
+            .output/*-firefox.zip
+            .output/*-sources.zip
+
+  publish_chrome:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_chrome == 'true' }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build chrome zip
+        run: pnpm run zip
+
+      - name: Publish to Chrome Web Store
+        env:
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          ZIP_FILE=$(ls .output/*-chrome.zip | head -n 1)
+          pnpm dlx chrome-webstore-upload-cli upload \
+            --source "$ZIP_FILE" \
+            --extension-id "$CWS_EXTENSION_ID" \
+            --client-id "$CWS_CLIENT_ID" \
+            --client-secret "$CWS_CLIENT_SECRET" \
+            --refresh-token "$CWS_REFRESH_TOKEN"
+          pnpm dlx chrome-webstore-upload-cli publish \
+            --extension-id "$CWS_EXTENSION_ID" \
+            --client-id "$CWS_CLIENT_ID" \
+            --client-secret "$CWS_CLIENT_SECRET" \
+            --refresh-token "$CWS_REFRESH_TOKEN"
+
+  publish_edge:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_edge == 'true' }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build edge zip
+        run: pnpm run zip:edge
+
+      - name: Publish to Edge Add-ons (template)
+        env:
+          EDGE_TENANT_ID: ${{ secrets.EDGE_TENANT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_CLIENT_SECRET: ${{ secrets.EDGE_CLIENT_SECRET }}
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+        run: |
+          echo "Add your Edge Partner Center submission API script here."
+          echo "Required secrets are set as placeholders:"
+          echo "EDGE_TENANT_ID, EDGE_CLIENT_ID, EDGE_CLIENT_SECRET, EDGE_PRODUCT_ID"
+          echo "Template mode only: no publish action executed."
+
+  publish_firefox:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_firefox == 'true' }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build firefox zip
+        run: pnpm run zip:firefox
+
+      - name: Publish to Firefox AMO
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          pnpm dlx web-ext sign \
+            --channel listed \
+            --amo-metadata=./package.json \
+            --api-key "$AMO_JWT_ISSUER" \
+            --api-secret "$AMO_JWT_SECRET" \
+            --source-dir .output/firefox-mv2

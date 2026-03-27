@@ -3,7 +3,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'Lintro',
+    name: 'Lintro-AI Language Learning for Video Subtitles',
     permissions: [
       'storage',
       'offscreen',
